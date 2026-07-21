@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>菜品配方录入系统</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei',Arial,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:10px}
+.container{max-width:1200px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.3);overflow:hidden}
+.header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:20px;text-align:center}
+.header h1{font-size:22px;margin-bottom:6px}
+.header p{font-size:13px;opacity:.9}
+.content{padding:15px}
+.page{display:none}.page.active{display:block}
+.dept-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:15px}
+.dept-card{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:20px;border-radius:10px;text-align:center;cursor:pointer;transition:transform .2s}
+.dept-card:active{transform:scale(.97)}
+.dept-card h2{font-size:22px;margin-bottom:8px}
+.dept-card .count{font-size:42px;font-weight:bold;margin:10px 0}
+.dept-card .label{font-size:13px;opacity:.9}
+.back-btn{background:#667eea;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;margin-bottom:15px}
+.dish-list{margin-top:15px}
+.dish-item{background:#f8f9fa;padding:12px;border-radius:8px;margin-bottom:10px;display:flex;flex-direction:column;gap:8px}
+.dish-info h3{font-size:15px;margin-bottom:3px;color:#333}
+.dish-info p{color:#666;font-size:12px}
+.fill-btn{background:#28a745;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;width:100%}
+.fill-btn.filled{background:#6c757d}
+.dish-actions{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.dish-actions .opt-btn{flex:1;min-width:120px;padding:6px 10px;border:2px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:12px;color:#666}
+.dish-actions .opt-btn.active{background:#28a745;color:#fff;border-color:#28a745}
+.dish-actions .opt-btn.active.stop{background:#dc3545;border-color:#dc3545}
+.recipe-form{background:#f8f9fa;padding:15px;border-radius:10px;margin-top:15px}
+.recipe-form h2{margin-bottom:15px;color:#333;font-size:18px}
+.form-group{margin-bottom:15px}
+.form-group label{display:block;margin-bottom:6px;font-weight:bold;color:#555;font-size:14px}
+.form-group input,.form-group select{width:100%;padding:10px;border:2px solid #ddd;border-radius:6px;font-size:14px}
+
+/* 主料搜索下拉 */
+.ingredient-row{padding:12px;background:#fff;border-radius:8px;border:1px solid #e9ecef;margin-bottom:8px;position:relative}
+.ingredient-row .row-top{display:grid;grid-template-columns:1fr 80px 80px;gap:6px;align-items:center}
+.ingredient-row .row-btns{display:flex;gap:6px;margin-top:6px}
+.ingredient-search{position:relative}
+.ingredient-search input{width:100%;padding:10px;border:2px solid #ddd;border-radius:6px;font-size:14px}
+.ingredient-search input:focus{border-color:#667eea;outline:none}
+.ingredient-dropdown{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-top:none;max-height:200px;overflow-y:auto;z-index:100;display:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.ingredient-dropdown.show{display:block}
+.ingredient-dropdown div{padding:10px;cursor:pointer;font-size:14px;border-bottom:1px solid #f0f0f0}
+.ingredient-dropdown div:hover{background:#f0f4ff}
+.ingredient-dropdown .empty{padding:10px;color:#999;text-align:center}
+.remove-btn{background:#dc3545;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:12px;flex:1}
+.add-btn{background:#17a2b8;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;margin-bottom:15px;width:100%}
+.submit-btn{background:#28a745;color:#fff;border:none;padding:12px;border-radius:6px;cursor:pointer;font-size:15px;width:100%;margin-top:15px}
+
+/* 状态选项 */
+.status-options{margin-top:12px;padding:12px;background:#fff;border-radius:8px;border:1px solid #e9ecef}
+.status-options .opt-title{font-weight:bold;margin-bottom:8px;color:#555;font-size:14px}
+.status-options .opt-row{display:flex;gap:10px}
+.status-options .opt-row label{flex:1;display:flex;align-items:center;gap:6px;padding:8px;border:2px solid #ddd;border-radius:6px;cursor:pointer;font-size:13px;font-weight:normal}
+.status-options .opt-row label.checked-green{border-color:#28a745;background:#e8f5e9;color:#28a745}
+.status-options .opt-row label.checked-red{border-color:#dc3545;background:#ffebee;color:#dc3545}
+.status-options .opt-row input{width:auto;margin:0}
+
+.admin-btn{position:fixed;bottom:15px;right:15px;background:#dc3545;color:#fff;border:none;padding:10px 18px;border-radius:50px;cursor:pointer;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.2);z-index:1000}
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:15px}
+.stat-card{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:15px;border-radius:10px;text-align:center}
+.stat-card .number{font-size:28px;font-weight:bold;margin:8px 0}
+.stat-card .label{font-size:12px;opacity:.9}
+.tab-buttons{display:flex;gap:6px;margin-bottom:15px;flex-wrap:wrap}
+.tab-btn{flex:1;min-width:80px;background:#e9ecef;color:#495057;border:none;padding:10px 6px;border-radius:6px;cursor:pointer;font-size:12px}
+.tab-btn.active{background:#667eea;color:#fff}
+.tab-content{display:none}.tab-content.active{display:block}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:6px;overflow:hidden;min-width:500px}
+th{background:#667eea;color:#fff;padding:10px;text-align:left;font-size:12px;white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid #e9ecef;font-size:12px}
+tr:hover{background:#f8f9fa}
+.status-badge{display:inline-block;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:bold}
+.status-badge.pending{background:#fff3cd;color:#856404}
+.status-badge.completed{background:#d4edda;color:#155724}
+.status-badge.stopped{background:#f8d7da;color:#721c24}
+.action-btn{padding:4px 8px;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin-right:4px}
+.action-btn.return{background:#ffc107;color:#000}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:2000;padding:10px;overflow-y:auto}
+.modal.active{display:block}
+.modal-content{background:#fff;padding:15px;border-radius:10px;margin:10px auto;max-width:900px}
+.close-btn{float:right;background:none;border:none;font-size:24px;cursor:pointer;color:#999}
+.search-box{width:100%;padding:10px;border:2px solid #ddd;border-radius:6px;font-size:14px;margin-bottom:10px}
+@media(min-width:768px){
+body{padding:20px}
+.header h1{font-size:28px}
+.header p{font-size:15px}
+.content{padding:30px}
+.dept-grid{grid-template-columns:repeat(3,1fr);gap:20px}
+.dept-card{padding:35px}
+.dept-card h2{font-size:26px}
+.dept-card .count{font-size:48px}
+.dish-item{flex-direction:row;justify-content:space-between;align-items:center;padding:15px}
+.fill-btn{width:auto}
+.ingredient-row .row-top{grid-template-columns:2fr 100px 90px}
+.stats-grid{grid-template-columns:repeat(4,1fr)}
+.tab-btn{font-size:14px;padding:12px}
+}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<h1>🍳 菜品配方录入系统</h1>
+<p>年顺渔村东坑店</p>
+</div>
+<div class="content">
+
+<div id="page-dept" class="page active">
+<h2 style="text-align:center;margin-bottom:8px">请选择部门</h2>
+<p style="text-align:center;color:#666;font-size:13px">选择您要录入配方的部门</p>
+<div class="dept-grid">
+<div class="dept-card" onclick="selectDept('中厨')">
+<h2>🔥 中厨</h2>
+<div class="count" id="count-中厨">0</div>
+<div class="label">待录入菜品</div>
+</div>
+<div class="dept-card" onclick="selectDept('点心')">
+<h2>🥟 点心</h2>
+<div class="count" id="count-点心">0</div>
+<div class="label">待录入菜品</div>
+</div>
+<div class="dept-card" onclick="selectDept('味部')">
+<h2>🍲 味部</h2>
+<div class="count" id="count-味部">0</div>
+<div class="label">待录入菜品</div>
+</div>
+</div>
+</div>
+
+<div id="page-dishes" class="page">
+<button class="back-btn" onclick="showPage('page-dept')">← 返回部门选择</button>
+<h2 id="dept-title" style="margin-bottom:10px">待录入菜品</h2>
+<input type="text" class="search-box" id="dish-search" placeholder="搜索菜品名称..." oninput="filterDishes()">
+<div class="dish-list" id="dish-list"></div>
+</div>
+
+<div id="page-recipe" class="page">
+<button class="back-btn" onclick="backToDishes()">← 返回菜品列表</button>
+<div class="recipe-form">
+<h2 id="recipe-title">填写配方</h2>
+<div class="form-group">
+<label>主料清单</label>
+<div id="ingredients-list"></div>
+<button type="button" class="add-btn" onclick="addIngredient()">+ 添加主料</button>
+</div>
+<div class="form-group">
+<label>调料费（元）</label>
+<input type="number" id="seasoning-cost" step="0.01" placeholder="所有辅料和调料的总费用">
+</div>
+
+<div class="status-options">
+<div class="opt-title">菜品状态（可选）</div>
+<div class="opt-row">
+<label id="opt-completed-label">
+<input type="checkbox" name="dish-status" value="completed" onchange="updateStatusStyle()"> ✅ 该菜品已填写配方
+</label>
+<label id="opt-stopped-label">
+<input type="checkbox" name="dish-status" value="stopped" onchange="updateStatusStyle()"> 🚫 该菜品不再售卖
+</label>
+</div>
+</div>
+
+<button type="button" class="submit-btn" onclick="submitRecipe()">保存</button>
+</div>
+</div>
+
+</div>
+</div>
+
+<button class="admin-btn" onclick="showAdmin()">📊 后台管理</button>
+
+<div id="admin-modal" class="modal">
+<div class="modal-content">
+<button class="close-btn" onclick="closeAdmin()">✕</button>
+<h2 style="margin-bottom:15px">📊 后台数据管理</h2>
+<div class="stats-grid">
+<div class="stat-card"><div class="label">总菜品数</div><div class="number" id="stat-total">0</div></div>
+<div class="stat-card"><div class="label">已填写</div><div class="number" id="stat-completed">0</div></div>
+<div class="stat-card"><div class="label">不售卖</div><div class="number" id="stat-stopped">0</div></div>
+<div class="stat-card"><div class="label">未录入</div><div class="number" id="stat-pending">0</div></div>
+</div>
+<div class="tab-buttons">
+<button class="tab-btn active" onclick="switchTab(this,'tab-pending')">未录入菜品</button>
+<button class="tab-btn" onclick="switchTab(this,'tab-completed')">已录入配方</button>
+<button class="tab-btn" onclick="switchTab(this,'tab-dept')">部门统计</button>
+</div>
+<div id="tab-pending" class="tab-content active"><div class="table-wrap"><table><thead><tr><th>部门</th><th>类别</th><th>菜品名称</th><th>状态</th></tr></thead><tbody id="pending-table"></tbody></table></div></div>
+<div id="tab-completed" class="tab-content"><div class="table-wrap"><table><thead><tr><th>部门</th><th>菜品名称</th><th>状态</th><th>主料</th><th>调料费</th><th>操作</th></tr></thead><tbody id="completed-table"></tbody></table></div></div>
+<div id="tab-dept" class="tab-content"><div class="table-wrap"><table><thead><tr><th>部门</th><th>总数</th><th>已填写</th><th>不售卖</th><th>未录入</th></tr></thead><tbody id="dept-table"></tbody></table></div></div>
+<div style="margin-top:15px;text-align:center">
+<button class="add-btn" style="width:auto;background:#28a745" onclick="exportData()">📥 导出数据</button>
+</div>
+</div>
+</div>
+
+<script>
+// Supabase 配置
+const SUPABASE_URL = 'https://hqfyvejerzojmyifenwy.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxZnl2ZWplcnpvam15aWZlbnd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MjM2NTMsImV4cCI6MjEwMDE5OTY1M30.S4bTAcd19tjP-ApKA00ziCK4vpzWCyYuiWa1_p0xZpU';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// 从云端加载数据
+async function loadFromCloud() {
+    try {
+        const { data, error } = await supabase.from('recipes').select('*');
+        if (error) {
+            console.error('加载数据失败:', error);
+        } else {
+            completedRecipes = data || [];
+            localStorage.setItem('completedRecipes', JSON.stringify(completedRecipes));
+        }
+    } catch (e) {
+        console.error('加载异常:', e);
+    } finally {
+        // 无论成功失败都更新计数
+        updateDeptCounts();
+    }
+}
+
+// 保存数据到云端
+async function saveToCloud(recipe) {
+    try {
+        const { data, error } = await supabase.from('recipes').insert([recipe]);
+        if (error) {
+            console.error('保存失败:', error);
+            return false;
+        }
+        return true;
+    } catch (e) {
+        console.error('保存异常:', e);
+        return false;
+    }
+}
+
+var MATERIALS = ["特级黄玉参(干货)", "41/50青虾仁(冻)", "12头南非鲍(干货)", "安格斯三角肥牛(冻)", "牛上脑肉", "炸凤爪(冻)", "生凤爪(冻)", "牛肉片(冻)", "长柄鸡脚(冻)", "无皮五花肉", "银雪鱼(冻)", "翡翠鲜贝(冻)", "鹅掌(冻)", "水晶馅", "燕窝", "中厨牛仔骨(冻)", "大黄鱼(冻)", "牛肉胶(冻)", "湖南腊肉", "伟红蒜香骨(冻)", "益食嘉枣皇糕", "双汇猪手(冻)", "猪肉胶", "羊排(冻)", "金钱肚(冻)", "茗豪洋顶级金酥片", "菲尚旺鲍皇酱", "乐多点芝士馅", "30头鲍翅(干货)", "250头瑶柱(干货)", "24寸大鱼翅(干货)", "黑棕鹅", "精选包装牛仔骨", "菲尚旺白雪酱", "猪颈肉", "火箭鱿鱼", "精选肉排骨", "001炒饭王", "腊肉(干货)", "腊肠(干货)", "干的猪蹄筋", "羊肚菌(干货)", "花菇(干货)", "鲮鱼肉", "金豪福幼砂糖", "美年顺大豆油", "百花馅(冻）", "安佳芝士碎(冻)", "台州豆腐", "标隆奶露馅", "61/70青虾仁", "优积古发糕粉", "雪晶粉", "益食嘉粗粮糕粉", "带子肉", "乐盈达水晶粉", "新西兰进口黄油", "厨旋风金脆粉", "飞水精品牛杂", "月露山竹", "厨旋风米皇粉", "千筋粉", "点都易麦香酱", "双人牌白巧克力馅", "麻虾", "净牛坑腩", "鸡中翅(冻)点心", "双德泡打粉", "俊盛花生油", "16头花胶公", "碎瑶柱(小颗粒）", "白网皮", "乳鸽", "乐多点麦皇粉", "菲尚旺芯芯粉", "积苗低筋面粉", "龙骨", "乐盈达精麦粉", "墨鱼胶", "6头鲍鱼", "红蟹子(冻)", "酥喜来黄奶油", "金装油皮", "酥喜莱猪油", "厚身肥肉", "无骨鸭掌", "鲜百合", "16号（多用酥条）", "华生丑丑米", "点深师香凤酱", "泰国茉莉香米(大包)", "肉排骨", "鸡骨架(冻)", "皮蛋", "苔豪洋鲍皇酱", "脆皮老鸡", "乐盈达雪麦香粉", "乐其雅黑松露菌酱", "素春卷", "面包丝", "益食嘉麦蕾粉20kg", "乐多点雪滋粉", "脆奶卷(冻)", "宴会脆脆粉", "菲尚旺百拌粉", "钜洋牌富春粉", "芡霸白籼粉", "凤梨卷", "优积荷叶", "笋干（干货）", "菲尚旺XO酱", "南亚保鲜膜(45)", "五花肉", "森林哥乐果粉", "丰年穗白玉粉", "中厨 香芋条", "小河虾", "鳗鱼（冻品)", "石斛(干货)", "冻鲍鱼肉", "老鸡", "腐皮", "鸡蛋", "天鹅头（冻）", "西洋参(干货)", "蒜肉", "河虾仔(青菜)", "120头瑶柱(干货)", "田七片(干货)", "掌中宝（冻）", "赤瘦肉", "响螺", "铁棍淮山", "方马拉糕", "鲜瑶柱", "罗拨臣明胶鱼胶粉", "松茸(干货)", "鸡比肉", "抹茶味酥油皮", "直节虾", "薯角(冻)", "鸡腿肉(冻)", "云耳(干货)", "钜洋香酥油", "8头鲍鱼", "泰皇糯米", "野米", "红豆(干货)", "钜洋黄酥油", "香菇（干货）", "罗定鱼腐", "享美乐酸奶酱", "大花桥桂林辣椒酱", "底油", "桂花(干货)", "银鱼仔(干货)", "牛肝菌", "乌江榨菜", "竹升面", "洋洋德DD糖", "去皮核桃肉(干货)", "虾滑(冻)", "榴莲肉(冻)", "麻笋丁", "金钻植脂奶油", "钜洋鸡尾馅", "洋洋德泡打粉", "白妃宝宝乳", "5.5寸蒸笼纸", "肉眼", "9.5寸花底纸", "鲜人参(斤)", "猪肚", "去皮香芋", "白糖", "青豆粒(包)", "雀巢淡奶油", "猪小展肉", "雀巢牌全脂奶粉", "当归片(干货)", "海天金标生抽1.9L", "6.5寸蒸笼纸", "帝门玉米粒", "75*60单层打印纸", "9.5寸蒸笼纸", "天青味粉", "白萝卜", "格洋麻油", "白果肉(包)", "进口韩国幼砂糖TS", "川贝(干货)", "65公分地刮", "雀巢美极鲜味汁", "海天添丁甜醋", "肉松", "花生碎", "三文治火腿(青菜)", "小青笋", "正常花生米(干货)", "汕头潮州咸菜", "黄牛肉", "顿可牌辣椒油", "金味美龙口粉丝", "酸菜(桶)", "鸡枞菌", "鲮鱼胶(青菜)", "猪舌", "马拉糕纸", "美人椒", "瓜子仁", "金华火腿", "鹿茸菌(干货)", "老南瓜", "狮牌吉士粉", "四季宝花生酱", "五指毛桃", "菜干(干货)", "水鸭", "腐竹", "仔姜", "不沾包底纸70*70", "黑蒜", "马蹄肉", "家乐鸡粉", "海天海鲜酱7kg", "玉竹(干货)", "百香果", "胶夹子", "菠萝蜜肉", "党参(干货)", "味龙陈村枧水", "无心白莲子", "大师傅塔塔粉", "枸杞(干货)", "西藏南瓜", "鲜花椒", "家乐鸡汁", "金牌高达椰浆", "李锦记(锦珍)豆瓣酱", "干葱肉", "洗沙鱼丸", "虫草花(干货)", "黄片糖(小件)", "冬瓜条", "甄想记黑胡椒碎", "蟹柳(冻)", "单晶冰糖", "大芒果", "生菜", "粉莲藕", "白芝麻(干货)", "靓陈皮(干货)", "东古一品鲜酱油(桶)", "洲星马蹄粉500g", "金味麦片", "伊利纯牛奶", "李锦记叉烧酱", "李锦记磨豉酱(桶)", "鹿茸菌", "家乐黑椒汁", "姜肉", "粉肠", "小韭菜", "咸蛋黄", "三花薯仔粉", "香叶(干货)", "椰丝", "红头葱", "蛋糕油", "毛豆仁", "金瓜", "水东芥菜", "炒锅（46cm）", "双桥味精(晶体)", "二级洗洁精", "春卷皮", "花甲肉", "无核红枣(干货)", "芦笋", "艾叶", "黑葡萄干", "黄色陈皮（干货）", "海天英标(桶)", "沙姜干(干货)", "小方巾", "东古小南乳", "象球面豉酱", "海天草菇老抽", "海天蚝油(桶)", "去皮姜肉", "樟树港辣椒", "雪山菜苗（板蓝根苗）", "白莲蓉", "桂皮(干货)", "保卫尔牛肉汁", "燕子酵母", "御玖丰瑶柱鲍鱼汁", "李锦记柱候酱(桶)", "韭王", "白胡椒粉(干货)", "酸姜片", "石竹梅", "虾米(干货)", "250竹夹", "虾皮", "菊花盏B104", "改良剂(S-500)", "百利红腰豆", "甜蜜豆", "荷兰豆", "去皮老姜", "吉利丁明胶片", "四眼井陈醋", "海底椰(干货)", "东莞米粉", "阳江豆豉400g", "燕麦米(干货)", "眉豆(干货)", "布帽红黄边", "韭菜花", "榄角(干货)", "海天黄豆酱", "斧头臭粉", "山水豆腐", "广式龙制甜话梅", "冬菜", "广祥泰鸡饭老抽", "金针菇", "口罩", "40*60吸油纸", "家乐鸡精", "沙姜", "泰国金杯鱼露", "大白皮", "西芹", "绿环五香粉", "嘉文盐焗鸡料(盒)", "100*120黑色垃圾袋", "猪肝", "青榄", "柠檬", "隔汤袋", "菠萝", "糯米粟", "老干妈", "芫茜", "红星二锅头56°", "妙多咖喱粉", "宁夏菜心", "草菇", "去皮  沙葛", "红辣椒干(干货)", "厨房纸", "毛豆", "平阳玫瑰花（干货）", "日本青瓜", "红萝卜", "云吞皮【斤】", "小黄皮", "西兰花", "绿色色素(油性)", "烧烤小竹签", "地刷", "一次性手套(厨房)", "医用手套（短）", "丘比沙拉酱(香甜味）", "大(透明)胶袋", "八角(干货)", "莲藕", "王守义十三香", "红花椒粒(干货)", "点火枪", "小条红心番薯", "九江米酒", "洋葱", "京葱", "猪腰", "深井粤盐", "紫金椒酱", "南洋胶手套", "鸡子", "黄豆(干货)", "薏米(斤)", "玻璃水", "中(透明)胶袋", "新鲜虫草花", "双鹤牌玫瑰露酒37°", "红心火龙果", "黑芝麻(干货)", "发菜", "广味源大红浙醋", "香茅", "湘汝小米辣", "家乐安多夫松肉粉", "双斧食粉", "小红椒", "番茄仔", "大片百洁布", "锅扫", "皇牌沙茶王", "古越龙山花雕酒", "湖南椒", "棉手套", "香芹", "白贝", "酸梅子", "酸性调味汁", "黄九芽", "酸菜", "冠牌白醋", "猪心", "小茴香(干货)", "高帽", "樱桃萝卜", "腌制盐", "高级商用擦手纸", "柠檬叶", "白色透明胶袋(小)", "枸杞叶", "青椒", "凉瓜", "云南小瓜", "四季豆", "茄瓜", "手指葱", "白蘑菇", "广州沙河粉", "银牙", "红叶生菜", "白葱", "香菜", "黄圆椒", "红圆椒", "草莓", "椰菜花", "蒜苗", "红葱肉", "红椒", "青瓜", "指天椒", "冰草", "南姜", "薄荷叶(盒)", "娃娃菜", "丝瓜", "白玉菇(包)", "韭菜", "绍实", "香芋", "椰菜", "咸鱼", "南瓜", "康乃馨", "老豆腐(斤)", "小青柠", "魔芋丝结", "上海青", "豆芽", "水果木瓜", "奶白菜苗", "螺丝椒", "九芽生菜", "秋葵", "番西", "兰花", "去皮菠萝", "芥兰苗", "凤尾叶", "芋丝", "蒜心", "杭州咸肉", "三头百合", "冬笋(罐)", "东莞鱼包", "陈村粉", "鲜冬菇", "苹果丝瓜", "去皮莴笋", "花生芽", "番薯叶", "西兰苔", "板蓝根", "新鲜带壳花生", "特大大头鱼", "前瘦肉", "生猪血", "猪展肉", "冰川茄瓜", "老甜蜜豆", "树番茄", "罗马生菜", "黄九芽菜", "圣女果", "珍珠凉瓜", "小唐菜", "果园鸡", "扇鸡(只)", "鸡油", "开平三黄鸡", "活鸡", "单牛展", "小酥肉", "肋排", "家乐辣鲜露", "家乐金酸汤酱", "东古一品鲜酱油(瓶)", "家乐鹰栗粉", "橙红色素(油性)", "三象牌糯米粉", "广合腐乳", "顶好芝麻酱", "李锦记财神蚝油", "李锦记旧庄蚝油", "三象牌粘米粉", "风车生粉", "恒顺牌香醋4.5°", "粗盐", "安格斯黄姜粉", "李锦记排骨酱", "橄榄菜", "双桥味精(粉体)", "新世纪伊面", "三花植脂淡奶", "百味佳炸粉", "三五火锅底料", "李锦记海鲜酱(桶)", "丘比沙拉汁焙煎芝麻口味", "家乐浓缩火腿汁", "丘比沙拉酱(蛋黄味)", "双喜泡打粉", "大家盛爽滑全蛋面", "绿环沙姜粉", "海天海鲜酱", "鸟巢伊面", "雀巢炼奶", "五丰黎红花椒油", "腰果", "冰花酸梅酱", "陈克明挂面", "石龙豆皮鸡粉", "金钻奶油", "帝门番茄沙司", "黄飞红香脆椒", "云吞皮", "军杰小米辣", "艺术纸", "安佳无盐黄油(包)", "海蜇丝", "虾糕", "八角粉", "上海  麦芽酚   焦香", "美味源盐焗鸡粉", "新鲜鹅翅", "顺德二曲", "鲜味宝", "中邦蒜蓉辣椒酱", "李派林急汁", "添味坊鲜果酱", "混椒香辣酱", "添味坊拌拌香调味汁", "龙眼井老缸陈醋", "任原烧肉调味酱", "甘草粉", "桂皮粉", "陈皮粉", "珍岛牌味椒盐", "石龙纯正麦芽糖（小瓶）", "冠牌白醋10.5L", "味佳厨蒜香粉", "海天添丁甜醋4.9L", "海天白醋10.5L", "碎瑶柱", "绿色干蒸皮", "白鹤澄面450克", "竹升面（件）", "茉莉香米", "青花椒粒(干货)", "辣椒节(干货)", "白胡椒粒(干货)", "冬菇(干货)", "草果(干货)", "绿豆(干货)", "花旗参片(干货)", "鸡蛋胶(干货)", "山楂饼(干货)", "竹笙(干货)", "12头大连吉品鲍", "点心牛仔骨(冻)", "大凤爪(冻)", "冻黑松露(冻)", "中段 安格斯  牛仔骨", "水饺(冻品)", "海螺片(袋装)", "鲜食10头海参", "抽纸", "尖头竹签", "扫把", "黑色垃圾袋（33cm）", "一次性网帽(厨部)", "一次性筷子", "615锡纸", "安格斯上脑", "鸡架", "红鱼干", "鸡中宝（冻品）", "金罗猪手", "九节虾", "大罗氏虾", "东鹰洗衣粉", "洁宝康漂白水", "削皮刀", "竹签（铭君）", "家家宜厨房油污净", "雷洛滋保鲜膜45cm", "大海螺", "圣子王", "大带子", "花甲", "沙白", "8头鲍鱼(斤)", "无草糕蟹", "吊水鲩鱼", "大黄花鱼", "直麻虾", "鲜鱿鱼", "草鱼", "九肚鱼", "80头大连参(干货)", "乳猪8-9", "牛展肉", "60头花胶筒(干货)", "精选五花肉", "九层塔", "小雏菊", "水果西芹", "厚身猪肚", "水果通菜", "糯玉米", "榴莲红薯", "干白木耳", "黄贡椒", "红线椒", "红蒜苗", "石头猪", "白鸭", "李锦记蒸鱼豉油1.9L", "木姜油", "冬瓜糖", "进口双箭澄面", "淳满源花生油", "马友咸鱼(干货)", "陈皮", "嘉城冰片糖9.5kg", "南非10头干鲍鱼", "甜话梅", "300头瑶柱", "25头黄玉参", "20头黄玉参", "黄金10头干鲍鱼", "黄金12头干鲍鱼", "南非12头干鲍鱼", "大炸爪", "干蒸肉", "申其糯米鸡", "家家宜洗衣粉", "钢丝球", "吸水毛巾", "蛋糕杯8cm", "网厘", "炸漏", "手拿喷枪", "60公分地刮", "电子克称", "法罗三文鱼"];
+var DISHES = [{"dept": "点心", "category": "欢乐时光", "name": "(半价)蚝皇鲜虾鲜竹卷", "code": "59082", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "手工虾饼", "code": "25152", "unit": "个"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)瑶柱蛋白炒饭", "code": "59077", "unit": "例"}, {"dept": "点心", "category": "步步糕升", "name": "黑加仑南瓜糕 美", "code": "29003", "unit": "份"}, {"dept": "点心", "category": "富粥一世", "name": "鲜百合淮山玉米粥", "code": "06031", "unit": "份"}, {"dept": "点心", "category": "单尾点心", "name": "香煎生肉包", "code": "30008", "unit": "件"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)干炒牛河", "code": "59067", "unit": "例"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)三丝炒面", "code": "59073", "unit": "例"}, {"dept": "点心", "category": "欢乐时光", "name": "(半价)菜干咸骨粥", "code": "59028", "unit": "份"}, {"dept": "中厨", "category": "营养靓汤", "name": "新会陈皮炖猪肉汤", "code": "41035", "unit": "位"}, {"dept": "中厨", "category": "健康主食", "name": "干炒牛河(早)", "code": "17001", "unit": "份"}, {"dept": "中厨", "category": "健康主食", "name": "三丝炒面(早)", "code": "17002", "unit": "份"}, {"dept": "点心", "category": "财源滚滚", "name": "捞起生菜梗", "code": "05040", "unit": "份"}, {"dept": "点心", "category": "原生态石磨坊", "name": "农家土鸡蛋肠", "code": "08015", "unit": "份"}, {"dept": "点心", "category": "富粥一世", "name": "新鲜猪杂煲仔粥", "code": "06032", "unit": "份"}, {"dept": "点心", "category": "蒸蒸日上", "name": "养生五谷杂粮", "code": "33037", "unit": "份"}, {"dept": "点心", "category": "原生态石磨坊", "name": "粤西手工捞粉", "code": "08017", "unit": "份"}, {"dept": "点心", "category": "欢乐时光", "name": "(半价)农家土鸡蛋肠", "code": "59005", "unit": "份"}, {"dept": "点心", "category": "原生态石磨坊", "name": "冬菜芫茜牛牛肉肠", "code": "08020", "unit": "份"}, {"dept": "点心", "category": "人间烟火气", "name": "广式香葱煎包仔", "code": "32031", "unit": "份"}, {"dept": "中厨", "category": "营养主食", "name": "瑶柱蛋白炒饭", "code": "23005", "unit": "例"}, {"dept": "点心", "category": "欢乐时光", "name": "(半价)粤西手工捞粉", "code": "59016", "unit": "份"}, {"dept": "点心", "category": "人间烟火气", "name": "香煎鲜虾韭菜饼", "code": "32027", "unit": "份"}, {"dept": "中厨", "category": "年顺招牌", "name": "浓汤手撕老豆腐", "code": "03022", "unit": "例"}, {"dept": "中厨", "category": "田园时蔬", "name": "菜心", "code": "20001", "unit": "例"}, {"dept": "点心", "category": "财源滚滚", "name": "姜蓉捞起水东芥", "code": "05039", "unit": "份"}, {"dept": "点心", "category": "单尾点心", "name": "香煎葱油饼", "code": "30038", "unit": "件"}, {"dept": "点心", "category": "蒸蒸日上", "name": "蚝皇鲜虾鲜竹卷", "code": "33042", "unit": "份"}, {"dept": "点心", "category": "原生态石磨坊", "name": "五谷杂粮肠", "code": "08016", "unit": "份"}, {"dept": "点心", "category": "焗焗为赢", "name": "酥脆咸香肉松包", "code": "31011", "unit": "份"}, {"dept": "点心", "category": "财源滚滚", "name": "面豉排骨饭", "code": "05041", "unit": "份"}, {"dept": "点心", "category": "甜甜蜜蜜", "name": "香芒椰汁糕", "code": "51006", "unit": "份"}, {"dept": "点心", "category": "步步糕升", "name": "桂花千层糕", "code": "29018", "unit": "份"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)生炒菜心", "code": "59060", "unit": "份"}, {"dept": "点心", "category": "富粥一世", "name": "菜干咸骨粥", "code": "06039", "unit": "份"}, {"dept": "点心", "category": "富粥一世", "name": "骨腩肉片菜心粒粥", "code": "06029", "unit": "份"}, {"dept": "点心", "category": "甜甜蜜蜜", "name": "百香果布丁", "code": "51007", "unit": "份"}, {"dept": "点心", "category": "单尾点心", "name": "黑加仑南瓜糕", "code": "30015", "unit": "件"}, {"dept": "点心", "category": "欢乐时光", "name": "(半价)香煎火腿葱油饼", "code": "59034", "unit": "份"}, {"dept": "点心", "category": "步步糕升", "name": "家乡五香眉豆糕", "code": "29019", "unit": "份"}, {"dept": "点心", "category": "人间烟火气", "name": "香芒燕麦煎薄撑", "code": "32028", "unit": "份"}, {"dept": "味部", "category": "精美凉菜", "name": "有机蔬菜沙拉", "code": "13001", "unit": "份"}, {"dept": "味部", "category": "精美凉菜", "name": "口味青瓜", "code": "13005", "unit": "份"}, {"dept": "点心", "category": "财源滚滚", "name": "红鱼干肉碎饭", "code": "05038", "unit": "份"}, {"dept": "点心", "category": "包罗万有", "name": "香酥菠萝蜜餐包", "code": "28017", "unit": "份"}, {"dept": "点心", "category": "财源滚滚", "name": "和味牛腩生鲜面", "code": "05036", "unit": "份"}, {"dept": "味部", "category": "精美凉菜", "name": "老醋海蜇丝", "code": "13004", "unit": "份"}, {"dept": "中厨", "category": "健康主食", "name": "瑶柱蛋白炒饭(早)", "code": "17003", "unit": "份"}, {"dept": "中厨", "category": "营养主食", "name": "黑松露海鲜炒饭", "code": "23003", "unit": "例"}, {"dept": "点心", "category": "财源滚滚", "name": "猪杂沙姜浸猪红", "code": "05044", "unit": "份"}, {"dept": "点心", "category": "蒸蒸日上", "name": "顺德陈皮鲮鱼球", "code": "33033", "unit": "份"}, {"dept": "点心", "category": "财源滚滚", "name": "鲜虾时蔬云吞面", "code": "05043", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "凤梨咕噜肉", "code": "25007", "unit": "例"}, {"dept": "点心", "category": "人间烟火气", "name": "香煎南瓜糕", "code": "32025", "unit": "份"}, {"dept": "点心", "category": "十道必点", "name": "樱花脆皮焗餐包 超", "code": "07008", "unit": "份"}, {"dept": "中厨", "category": "田园时蔬", "name": "板蓝根苗", "code": "20045", "unit": "例"}, {"dept": "点心", "category": "富粥一世", "name": "福果瑶柱粥", "code": "06028", "unit": "份"}, {"dept": "味部", "category": "广式烧腊", "name": "年顺风味鸡", "code": "12005", "unit": "半"}, {"dept": "点心", "category": "现拿点心", "name": "手打陈皮牛肉丸(现拿点心)", "code": "64043", "unit": "份"}, {"dept": "点心", "category": "财源滚滚", "name": "时蔬新鲜猪杂粉", "code": "05042", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "海皇粉丝煲", "code": "25031", "unit": "例"}, {"dept": "点心", "category": "人间烟火气", "name": "空气鲜虾脆春卷", "code": "32022", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "醒胃酸汤花胶羹", "code": "25029", "unit": "位"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)海皇粉丝煲", "code": "59069", "unit": "例"}, {"dept": "中厨", "category": "年顺招牌", "name": "年顺一品煲", "code": "03001", "unit": "例"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)凤梨咕噜肉", "code": "59066", "unit": "例"}, {"dept": "中厨", "category": "时令蔬菜", "name": "生炒广东菜心(早)", "code": "19002", "unit": "份"}, {"dept": "点心", "category": "包罗万有", "name": "香煎火腿葱油饼", "code": "28018", "unit": "份"}, {"dept": "点心", "category": "富粥一世", "name": "腰润鱼片粥", "code": "06041", "unit": "份"}, {"dept": "味部", "category": "广式烧腊", "name": "卤水拼盘", "code": "12009", "unit": "例"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)冼沙鱼丸煲淋娃娃菜", "code": "59076", "unit": "例"}, {"dept": "点心", "category": "人间烟火气", "name": "开胃姜汁糕", "code": "32032", "unit": "份"}, {"dept": "中厨", "category": "川湘风味", "name": "辣椒炒肉", "code": "15005", "unit": "例"}, {"dept": "点心", "category": "财源滚滚", "name": "和味萝卜酱牛杂", "code": "05028", "unit": "份"}, {"dept": "中厨", "category": "川湘风味", "name": "水煮黄牛肉", "code": "15006", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "东南亚风味虾", "code": "25154", "unit": "份"}, {"dept": "中厨", "category": "经典小炒", "name": "香煎手工虾饼(早)", "code": "18012", "unit": "个"}, {"dept": "中厨", "category": "田园时蔬", "name": "罗定鱼腐煲白菜苗", "code": "20004", "unit": "例"}, {"dept": "点心", "category": "十道必点", "name": "芥末蒲烧鳗鱼挞", "code": "07013", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "粥油丝瓜浸沙白", "code": "25036", "unit": "例"}, {"dept": "味部", "category": "广式烧腊", "name": "广式脆皮烧鹅", "code": "12045", "unit": "半只"}, {"dept": "味部", "category": "广式烧腊", "name": "烧味拼盘", "code": "12007", "unit": "例"}, {"dept": "中厨", "category": "田园时蔬", "name": "番薯叶", "code": "20002", "unit": "例"}, {"dept": "点心", "category": "人间烟火气", "name": "塘敢萝卜酱牛腩", "code": "32024", "unit": "份"}, {"dept": "中厨", "category": "位上做法", "name": "龙腾四海", "code": "52002", "unit": "位"}, {"dept": "点心", "category": "十道必点", "name": "天鹅金枕榴莲酥", "code": "07019", "unit": "份"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)干锅有机花菜", "code": "59068", "unit": "例"}, {"dept": "中厨", "category": "位上做法", "name": "帝王风范", "code": "52005", "unit": "位"}, {"dept": "味部", "category": "粤式烧腊", "name": "金牌烧鹅皇(早)", "code": "39005", "unit": "份"}, {"dept": "点心", "category": "单尾点心", "name": "酥化水牛奶蛋挞", "code": "30016", "unit": "件"}, {"dept": "点心", "category": "焗焗为赢", "name": "安虾珍珠咸水角", "code": "31013", "unit": "份"}, {"dept": "点心", "category": "富粥一世", "name": "明火丝苗滑白粥", "code": "06035", "unit": "份"}, {"dept": "中厨", "category": "营养主食", "name": "生日长寿面", "code": "23007", "unit": "碗"}, {"dept": "中厨", "category": "营养靓汤", "name": "灯笼胡椒炖土猪肉汤", "code": "41015", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "金汤野米烩海参", "code": "25015", "unit": "例"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)酸菜鱼", "code": "59081", "unit": "例"}, {"dept": "中厨", "category": "湘川小炒", "name": "酸菜鱼(早)", "code": "22004", "unit": "例"}, {"dept": "点心", "category": "财源滚滚", "name": "像生榴莲山竹果", "code": "05049", "unit": "份"}, {"dept": "中厨", "category": "川湘风味", "name": "石锅手钓鱿鱼筒", "code": "15002", "unit": "例"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)菜心远炒鲮鱼滑", "code": "59064", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "葱烧脱脂猪手", "code": "25004", "unit": "例"}, {"dept": "中厨", "category": "田园时蔬", "name": "冼沙鱼丸煲娃娃菜", "code": "20006", "unit": "例"}, {"dept": "中厨", "category": "健康主食", "name": "咸鱼鸡粒炒饭(早)", "code": "17009", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "椒盐鸡枞菌", "code": "25013", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "榄菜肉碎炒四季豆", "code": "25017", "unit": "例"}, {"dept": "点心", "category": "现拿点心", "name": "麦皮椰丝冰肉包(现拿点心)", "code": "64021", "unit": "份"}, {"dept": "中厨", "category": "啫啫煲仔", "name": "砂锅荔浦香芋", "code": "24024", "unit": "例"}, {"dept": "点心", "category": "富粥一世", "name": "花生眉豆鲜鹅粥", "code": "06030", "unit": "份"}, {"dept": "点心", "category": "单尾点心", "name": "樱花脆皮焗餐包", "code": "30019", "unit": "件"}, {"dept": "中厨", "category": "健康主食", "name": "年顺海鲜炒饭(早)", "code": "17008", "unit": "份"}, {"dept": "点心", "category": "财源滚滚", "name": "高汤时蔬浸双丸", "code": "05033", "unit": "份"}, {"dept": "中厨", "category": "田园时蔬", "name": "蒜蓉炒时蔬(套餐)", "code": "20032", "unit": "例"}, {"dept": "点心", "category": "现拿点心", "name": "黑加仑南瓜糕(现拿点心)", "code": "64018", "unit": "份"}, {"dept": "中厨", "category": "精选炖汤", "name": "荔浦香芋扣肉", "code": "40002", "unit": "中"}, {"dept": "中厨", "category": "健康主食", "name": "葱油鲍汁伊面(早)", "code": "17004", "unit": "份"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)鱼香茄子煲", "code": "59078", "unit": "例"}, {"dept": "点心", "category": "单尾点心", "name": "南山寿包", "code": "30028", "unit": "件"}, {"dept": "中厨", "category": "甄选热菜", "name": "海鲜豪华生日面", "code": "25137", "unit": "份"}, {"dept": "中厨", "category": "田园时蔬", "name": "芥兰", "code": "20003", "unit": "例"}, {"dept": "味部", "category": "广式烧腊", "name": "烧鹅调料粉", "code": "12048", "unit": "斤"}, {"dept": "中厨", "category": "蒸的有味", "name": "沙白蒸土鸡蛋", "code": "04002", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "葱烧焖酿羊肚菌", "code": "25003", "unit": "例"}, {"dept": "中厨", "category": "蒸的有味", "name": "马友咸鱼蒸肉饼", "code": "04003", "unit": "例"}, {"dept": "味部", "category": "精美凉菜", "name": "凉拌东北木耳", "code": "13015", "unit": "份"}, {"dept": "味部", "category": "餐前凉菜", "name": "有机蔬菜沙拉(早)", "code": "49002", "unit": "份"}, {"dept": "中厨", "category": "经典小炒", "name": "凉瓜炒牛肉(早)", "code": "18042", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "鹿茸菌炒雪花牛柳", "code": "25033", "unit": "例"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)椒盐三文鱼骨腩", "code": "59071", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "胡椒白果猪肚煲", "code": "25010", "unit": "例"}, {"dept": "中厨", "category": "时令蔬菜", "name": "罗定鱼腐煲淋白菜苗(早)", "code": "19004", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "辣烧小海鲜", "code": "25159", "unit": "中"}, {"dept": "点心", "category": "现拿点心", "name": "养生五谷杂粮(现拿点心)", "code": "64032", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "孜然羊排", "code": "25028", "unit": "例"}, {"dept": "中厨", "category": "经典小炒", "name": "招牌蒜香骨(早)", "code": "18035", "unit": "份"}, {"dept": "中厨", "category": "时令蔬菜", "name": "芥兰(早)", "code": "19001", "unit": "份"}, {"dept": "中厨", "category": "川湘风味", "name": "剁椒水库鱼头", "code": "15095", "unit": "例"}, {"dept": "中厨", "category": "鲍参翅肚", "name": "鲍汁扣鲍鱼鹅掌", "code": "02002", "unit": "位"}, {"dept": "中厨", "category": "时令蔬菜", "name": "冼沙鱼丸煲淋娃娃菜(早)", "code": "19006", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "砂锅啫云南黄牛肝菌", "code": "25020", "unit": "例"}, {"dept": "中厨", "category": "田园时蔬", "name": "雪山菜苗", "code": "20059", "unit": "例"}, {"dept": "中厨", "category": "位上做法", "name": "鸡汤浸", "code": "52006", "unit": "位"}, {"dept": "中厨", "category": "甄选热菜", "name": "黄飞鸿掌中宝", "code": "25012", "unit": "例"}, {"dept": "中厨", "category": "经典小炒", "name": "脆皮豆腐(早)", "code": "18037", "unit": "份"}, {"dept": "味部", "category": "甄选热菜", "name": "脆皮牛肋骨", "code": "25052", "unit": "半例"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)虎皮尖椒", "code": "59070", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "台州烩面小海鲜", "code": "25021", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "脆瓜炒爽肉", "code": "25006", "unit": "例"}, {"dept": "中厨", "category": "营养主食", "name": "豉油皇炒面", "code": "23001", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "海南丝瓜浸鲮鱼滑", "code": "25008", "unit": "例"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)脆皮豆腐", "code": "59065", "unit": "例"}, {"dept": "中厨", "category": "蟹多食", "name": "*蟹盖蒸蛋", "code": "58004", "unit": "份"}, {"dept": "中厨", "category": "蟹多食", "name": "*蟹腿蒜蓉蒸", "code": "58002", "unit": "份"}, {"dept": "中厨", "category": "欢乐时光", "name": "(半价)私房手撕豆腐", "code": "59075", "unit": "例"}, {"dept": "中厨", "category": "经典小炒", "name": "蒜蓉炒西兰花(早)", "code": "18009", "unit": "份"}, {"dept": "中厨", "category": "蒸蒸日上/", "name": "马友咸鱼蒸肉饼(早)", "code": "26003", "unit": "份"}, {"dept": "中厨", "category": "精选炖汤", "name": "陈皮土猪肉汤", "code": "40003", "unit": "位"}, {"dept": "中厨", "category": "营养主食", "name": "干炒牛河", "code": "23002", "unit": "例"}, {"dept": "中厨", "category": "啫啫煲仔", "name": "健康粗粮煲(早)", "code": "24002", "unit": "份"}, {"dept": "点心", "category": "财源滚滚", "name": "高汤时蔬牛肉球", "code": "05035", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "椒盐九肚鱼", "code": "25143", "unit": "例"}, {"dept": "中厨", "category": "田园时蔬", "name": "原味煮苹果丝瓜", "code": "20013", "unit": "例"}, {"dept": "味部", "category": "精美凉菜", "name": "口水鸡", "code": "13014", "unit": "份"}, {"dept": "中厨", "category": "啫啫煲仔", "name": "海皇粉丝煲(早)", "code": "24001", "unit": "份"}, {"dept": "点心", "category": "财源滚滚", "name": "高汤时蔬浸鱼球", "code": "05034", "unit": "份"}, {"dept": "中厨", "category": "湘川小炒", "name": "干锅有机花菜(早)", "code": "22007", "unit": "份"}, {"dept": "中厨", "category": "蒸蒸日上/", "name": "虾干银丝蒸胜瓜(早)", "code": "26002", "unit": "份"}, {"dept": "中厨", "category": "田园时蔬", "name": "水果通菜", "code": "20063", "unit": "例"}, {"dept": "中厨", "category": "啫啫煲仔", "name": "私房手撕豆腐(早)", "code": "24007", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "马拉盏爽肉炒西兰苔", "code": "25018", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "松仁炒玉米粒", "code": "25035", "unit": "例"}, {"dept": "中厨", "category": "蒸的有味", "name": "虾干银丝蒸胜瓜", "code": "04006", "unit": "例"}, {"dept": "中厨", "category": "营养主食", "name": "贵妃龙虾汤泡饭", "code": "23009", "unit": "例"}, {"dept": "中厨", "category": "湘川小炒", "name": "辣椒炒肉(早)", "code": "22003", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "花生芽韭菜爆雪花牛柳", "code": "25043", "unit": "例"}, {"dept": "中厨", "category": "啫啫煲仔", "name": "凉瓜排骨煲(早)", "code": "24018", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "砂锅焗兰州九年百合", "code": "25019", "unit": "例"}, {"dept": "中厨", "category": "鲍参翅肚", "name": "冰湖野米扣大连辽参", "code": "02009", "unit": "位"}, {"dept": "中厨", "category": "湘川小炒", "name": "水煮黄牛肉(早)", "code": "22012", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "葱烧脱骨猪手", "code": "25150", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "凉瓜炒牛肉", "code": "25160", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "菜心远炒鲮鱼滑", "code": "25001", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "野山椒脆笋炒虾柳", "code": "25026", "unit": "例"}, {"dept": "中厨", "category": "经典小炒", "name": "凤梨咕噜肉(早)", "code": "18003", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "砂锅黑椒汁焗牛仔骨", "code": "25034", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "鱿鱼筒", "code": "25164", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "黑松露花胶啫果园鸡", "code": "25049", "unit": "例"}, {"dept": "味部", "category": "餐前凉菜", "name": "凉拌牛肉(早)", "code": "49004", "unit": "份"}, {"dept": "中厨", "category": "经典小炒", "name": "胡椒白果咸菜煮肚尖(早)", "code": "18017", "unit": "份"}, {"dept": "中厨", "category": "蟹多食", "name": "*蟹肉避风塘炒", "code": "58062", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "淮山炒银鳕鱼柳", "code": "25011", "unit": "例"}, {"dept": "中厨", "category": "经典小炒", "name": "鱼香茄子煲(早)", "code": "18016", "unit": "份"}, {"dept": "中厨", "category": "田园时蔬", "name": "生菜", "code": "20005", "unit": "例"}, {"dept": "味部", "category": "广式烧腊", "name": "蜜汁烧排骨", "code": "12053", "unit": "例"}, {"dept": "中厨", "category": "营养靓汤", "name": "炖汤", "code": "41034", "unit": "例"}, {"dept": "味部", "category": "精美凉菜", "name": "法式樱桃淮山", "code": "13002", "unit": "份"}, {"dept": "中厨", "category": "湘川小炒", "name": "酸汤牛肉(早)", "code": "22020", "unit": "份"}, {"dept": "味部", "category": "餐前凉菜", "name": "凉拌海蜇丝(早)", "code": "49001", "unit": "份"}, {"dept": "中厨", "category": "田园时蔬", "name": "水果芹菜", "code": "20065", "unit": "例"}, {"dept": "中厨", "category": "川湘风味", "name": "虎皮尖椒", "code": "15097", "unit": "份"}, {"dept": "中厨", "category": "鱼多食", "name": "*鱼头砂锅", "code": "46017", "unit": "份"}, {"dept": "中厨", "category": "湘川小炒", "name": "剁椒水库鱼头(早)", "code": "22009", "unit": "半"}, {"dept": "中厨", "category": "甄选热菜", "name": "XO酱爆海螺片", "code": "25037", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "酸汤牛肉+海鲜姿造拼盘【例】", "code": "25170", "unit": "例"}, {"dept": "中厨", "category": "蟹多食", "name": "*蟹盖炒饭", "code": "58003", "unit": "例"}, {"dept": "中厨", "category": "啫啫煲仔", "name": "石锅火箭鱿鱼筒(早)", "code": "24013", "unit": "例"}, {"dept": "中厨", "category": "啫啫煲仔", "name": "叉烧韭黄炒土鸡蛋(早)", "code": "24012", "unit": "份"}, {"dept": "味部", "category": "餐前凉菜", "name": "金枕罗衣(早)", "code": "49003", "unit": "份"}, {"dept": "中厨", "category": "湘川小炒", "name": "湘式红烧肉(早)", "code": "22008", "unit": "份"}, {"dept": "中厨", "category": "蟹多食", "name": "*蟹肉蟹爪椒盐", "code": "58005", "unit": "份"}, {"dept": "中厨", "category": "鲍参翅肚", "name": "黑椒汁煎牛扒", "code": "02003", "unit": "位"}, {"dept": "中厨", "category": "鱼类", "name": "鲟龙鱼", "code": "11046", "unit": "斤"}, {"dept": "味部", "category": "精美凉菜", "name": "美味树番茄", "code": "13008", "unit": "份"}, {"dept": "中厨", "category": "甄选热菜", "name": "脆皮豆腐", "code": "25116", "unit": "例"}, {"dept": "中厨", "category": "田园时蔬", "name": "娃娃菜", "code": "20010", "unit": "例"}, {"dept": "中厨", "category": "鲍参翅肚", "name": "木瓜炖官燕", "code": "02005", "unit": "位"}, {"dept": "中厨", "category": "经典小炒", "name": "菜心远炒鲮鱼滑(早)", "code": "18001", "unit": "份"}, {"dept": "味部", "category": "粤式烧腊", "name": "人参水晶鸡(早)", "code": "39004", "unit": "只"}, {"dept": "中厨", "category": "蚌多食", "name": "*蚌胆煲粥", "code": "14003", "unit": "例"}, {"dept": "中厨", "category": "蒸蒸日上", "name": "蒜蓉蒸胜瓜(早)", "code": "33044", "unit": "份"}, {"dept": "中厨", "category": "蚌多食", "name": "*蚌刺身", "code": "14002", "unit": "份"}, {"dept": "中厨", "category": "经典小炒", "name": "芥兰炒腊味(早)", "code": "18022", "unit": "份"}, {"dept": "中厨", "category": "蟹多食", "name": "*蟹肉蟹爪蒜蓉蒸", "code": "58006", "unit": "份"}, {"dept": "中厨", "category": "鱼多食", "name": "*鱼骨尾煎焗", "code": "46002", "unit": "份"}, {"dept": "中厨", "category": "川湘风味", "name": "酸菜煮鱼片(套餐)", "code": "15017", "unit": "例"}, {"dept": "中厨", "category": "经典小炒", "name": "榄菜肉末炒四季豆(早)", "code": "18007", "unit": "例"}, {"dept": "中厨", "category": "蒸蒸日上/", "name": "铜盘虫草花荷叶蒸鸡(早)", "code": "26004", "unit": "半"}, {"dept": "中厨", "category": "蟹多食", "name": "*蟹肉清蒸", "code": "58036", "unit": "份"}, {"dept": "中厨", "category": "虾多食", "name": "*虾头煲粥", "code": "21002", "unit": "例"}, {"dept": "中厨", "category": "甄选热菜", "name": "砂锅鱼头", "code": "25072", "unit": "例"}, {"dept": "中厨", "category": "蒸的有味", "name": "虾仁蒸蛋白", "code": "04004", "unit": "例"}, {"dept": "中厨", "category": "虾多食", "name": "*虾头椒盐", "code": "21003", "unit": "份"}, {"dept": "中厨", "category": "鱼多食", "name": "*酸菜鱼肉", "code": "46016", "unit": "份"}, {"dept": "点心", "category": "单尾点心", "name": "像生天鹅榴莲酥", "code": "30021", "unit": "半"}, {"dept": "中厨", "category": "蟹多食", "name": "蟹肉避风塘", "code": "58009", "unit": "份"}, {"dept": "味部", "category": "广式烧腊", "name": "陈村粉荔枝柴烧鹅【例】", "code": "12065", "unit": "例"}, {"dept": "味部", "category": "广式烧腊", "name": "陈村粉荔枝柴烧鹅【半只】", "code": "12063", "unit": "半只"}, {"dept": "中厨", "category": "甄选热菜", "name": "焗蟹饼", "code": "25172", "unit": "例"}, {"dept": "中厨", "category": "鱼多食", "name": "*鱼骨尾椒盐", "code": "46010", "unit": "份"}, {"dept": "中厨", "category": "营养主食", "name": "沙茶牛肉炒饭", "code": "23012", "unit": "例"}, {"dept": "中厨", "category": "蚌多食", "name": "*蚌胆菜心粒煲粥", "code": "14001", "unit": "例"}, {"dept": "中厨", "category": "蟹多食", "name": "*蟹脚椒盐", "code": "58015", "unit": "份"}, {"dept": "中厨", "category": "鲍参翅肚", "name": "浓汤竹笙鸡煲翅", "code": "02006", "unit": "位"}, {"dept": "点心", "category": "单尾点心", "name": "法式焦糖布丁", "code": "30039", "unit": "位"}, {"dept": "中厨", "category": "蟹多食", "name": "*蟹肉芝士伊面焗", "code": "58027", "unit": "例"}, {"dept": "味部", "category": "粤式烧腊", "name": "年顺风味鸡(早)", "code": "39007", "unit": "半"}, {"dept": "味部", "category": "粤式烧腊", "name": "卤水拼盘(早)", "code": "39006", "unit": "份"}, {"dept": "中厨", "category": "田园时蔬", "name": "蒜蓉粉丝蒸娃娃菜", "code": "20018", "unit": "例"}, {"dept": "中厨", "category": "鱼多食", "name": "*鱼骨尾香煎", "code": "46011", "unit": "份"}, {"dept": "中厨", "category": "蒸的有味", "name": "自制咸肉蒸荔浦香芋", "code": "04001", "unit": "例"}, {"dept": "中厨", "category": "田园时蔬", "name": "西兰花", "code": "20011", "unit": "例"}, {"dept": "中厨", "category": "位上做法", "name": "芝士碳烤", "code": "52004", "unit": "位"}, {"dept": "中厨", "category": "鱼多食", "name": "*鱼片水煮", "code": "46043", "unit": "份"}, {"dept": "中厨", "category": "蒸的有味", "name": "头菜丝蒸肉饼", "code": "04022", "unit": "例"}];
+var UNITS = ['斤', '两', '克', '公斤', '个', '只', '份', '条', '块', '片', '粒', '把', '包', '盒', '瓶', '支', '打', '窝', '例', '位', '件', '半', '中', '大', '小', '只', 'ml', 'L', 'ml', 'g', 'kg'];
+
+var completedRecipes = [];
+try { completedRecipes = JSON.parse(localStorage.getItem('completedRecipes') || '[]'); } catch(e) { completedRecipes = []; }
+
+var currentDept = '';
+var currentDish = null;
+var currentFilter = '';
+var currentEditDishName = null;
+
+async function init() {
+    await loadFromCloud();
+}
+window.onload = function() { init(); };
+
+function updateDeptCounts() {
+    var depts = ['中厨', '点心', '味部'];
+    for (var i = 0; i < depts.length; i++) {
+        var dept = depts[i];
+        var count = 0;
+        for (var j = 0; j < DISHES.length; j++) {
+            if (DISHES[j].dept === dept && !isCompleted(DISHES[j].name)) count++;
+        }
+        document.getElementById('count-' + dept).textContent = count;
+    }
+}
+
+function getRecord(dishName) {
+    for (var i = 0; i < completedRecipes.length; i++) {
+        if (completedRecipes[i].dishName === dishName) return completedRecipes[i];
+    }
+    return null;
+}
+
+function isCompleted(dishName) {
+    return getRecord(dishName) !== null;
+}
+
+function selectDept(dept) {
+    currentDept = dept;
+    currentFilter = '';
+    document.getElementById('dept-title').textContent = dept + ' - 待录入菜品';
+    document.getElementById('dish-search').value = '';
+    renderDishList();
+    showPage('page-dishes');
+}
+
+function filterDishes() {
+    currentFilter = document.getElementById('dish-search').value.toLowerCase();
+    renderDishList();
+}
+
+function renderDishList() {
+    var list = document.getElementById('dish-list');
+    var html = '';
+    var count = 0;
+    for (var i = 0; i < DISHES.length; i++) {
+        var d = DISHES[i];
+        if (d.dept !== currentDept) continue;
+        if (currentFilter && d.name.toLowerCase().indexOf(currentFilter) === -1) continue;
+        count++;
+        var record = getRecord(d.name);
+        var status = record ? record.status : '';
+        html += '<div class="dish-item">';
+        html += '<div style="flex:1">';
+        html += '<div class="dish-info"><h3>' + escHtml(d.name) + '</h3>';
+        html += '<p>类别: ' + escHtml(d.category) + ' | 编号: ' + escHtml(d.code) + ' | 单位: ' + escHtml(d.unit) + '</p></div>';
+        if (record) {
+            if (record.status === 'completed') {
+                html += '<span class="status-badge completed">✅ 已填写配方</span>';
+            } else if (record.status === 'stopped') {
+                html += '<span class="status-badge stopped">🚫 不再售卖</span>';
+            }
+        }
+        html += '</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:6px;min-width:140px">';
+        html += '<button class="fill-btn" data-idx="' + i + '" data-action="recipe">';
+        if (record && record.status === 'completed') html += '查看/修改配方';
+        else if (record && record.status === 'stopped') html += '查看';
+        else html += '填写配方';
+        html += '</button>';
+        if (!record) {
+            html += '<button class="opt-btn" style="background:#dc3545;color:#fff;border-color:#dc3545" data-idx="' + i + '" data-action="stop">🚫 不再售卖</button>';
+        } else if (record.status === 'stopped') {
+            html += '<button class="opt-btn" style="background:#17a2b8;color:#fff;border-color:#17a2b8" data-idx="' + i + '" data-action="resume">恢复待录入</button>';
+        }
+        html += '</div>';
+        html += '</div>';
+    }
+    if (count === 0) {
+        html = '<p style="text-align:center;color:#999;padding:30px">暂无待录入菜品</p>';
+    }
+    list.innerHTML = html;
+
+    var btns = list.querySelectorAll('.fill-btn');
+    for (var j = 0; j < btns.length; j++) {
+        btns[j].onclick = function() {
+            var idx = parseInt(this.getAttribute('data-idx'));
+            fillRecipe(idx);
+        };
+    }
+    var stopBtns = list.querySelectorAll('[data-action="stop"]');
+    for (var k = 0; k < stopBtns.length; k++) {
+        stopBtns[k].onclick = function() {
+            var idx = parseInt(this.getAttribute('data-idx'));
+            markAsStopped(idx);
+        };
+    }
+    var resumeBtns = list.querySelectorAll('[data-action="resume"]');
+    for (var m = 0; m < resumeBtns.length; m++) {
+        resumeBtns[m].onclick = function() {
+            var idx = parseInt(this.getAttribute('data-idx'));
+            resumeToPending(idx);
+        };
+    }
+}
+
+function escHtml(s) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(s));
+    return div.innerHTML;
+}
+
+function fillRecipe(idx) {
+    currentDish = DISHES[idx];
+    var record = getRecord(currentDish.name);
+    document.getElementById('recipe-title').textContent = (record && record.status === 'completed') ? '查看/修改配方 - ' : '填写配方 - ' + currentDish.name;
+    document.getElementById('ingredients-list').innerHTML = '';
+    document.getElementById('seasoning-cost').value = '';
+
+    // Reset checkbox
+    var checkboxes = document.querySelectorAll('input[name="dish-status"]');
+    for (var i = 0; i < checkboxes.length; i++) checkboxes[i].checked = false;
+    updateStatusStyle();
+
+    if (record && record.ingredients) {
+        for (var j = 0; j < record.ingredients.length; j++) {
+            addIngredient(record.ingredients[j].name, record.ingredients[j].amount, record.ingredients[j].unit);
+        }
+        document.getElementById('seasoning-cost').value = record.seasoningCost;
+        if (record.status === 'completed') {
+            document.querySelector('input[value="completed"]').checked = true;
+        } else if (record.status === 'stopped') {
+            document.querySelector('input[value="stopped"]').checked = true;
+        }
+        updateStatusStyle();
+    } else {
+        addIngredient();
+    }
+    showPage('page-recipe');
+}
+
+function addIngredient(name, amount, unit) {
+    var list = document.getElementById('ingredients-list');
+    var row = document.createElement('div');
+    row.className = 'ingredient-row';
+
+    var rowTop = document.createElement('div');
+    rowTop.className = 'row-top';
+
+    // Search dropdown
+    var searchDiv = document.createElement('div');
+    searchDiv.className = 'ingredient-search';
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'ingredient-name';
+    inp.placeholder = '搜索主料...';
+    inp.value = name || '';
+    inp.autocomplete = 'off';
+    inp.oninput = function() { showDropdown(this); };
+    inp.onfocus = function() { showDropdown(this); };
+    inp.onblur = function() { var self = this; setTimeout(function(){ hideDropdown(self); }, 200); };
+
+    var dropdown = document.createElement('div');
+    dropdown.className = 'ingredient-dropdown';
+    searchDiv.appendChild(inp);
+    searchDiv.appendChild(dropdown);
+
+    // Amount
+    var amtInp = document.createElement('input');
+    amtInp.type = 'number';
+    amtInp.className = 'ingredient-amount';
+    amtInp.step = '0.01';
+    amtInp.placeholder = '用量';
+    amtInp.value = amount || '';
+
+    // Unit
+    var unitSel = document.createElement('select');
+    unitSel.className = 'ingredient-unit';
+    var defOpt = document.createElement('option');
+    defOpt.value = '';
+    defOpt.textContent = '单位';
+    unitSel.appendChild(defOpt);
+    for (var i = 0; i < UNITS.length; i++) {
+        var opt = document.createElement('option');
+        opt.value = UNITS[i];
+        opt.textContent = UNITS[i];
+        if (unit && UNITS[i] === unit) opt.selected = true;
+        unitSel.appendChild(opt);
+    }
+
+    rowTop.appendChild(searchDiv);
+    rowTop.appendChild(amtInp);
+    rowTop.appendChild(unitSel);
+
+    var btnRow = document.createElement('div');
+    btnRow.className = 'row-btns';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'remove-btn';
+    btn.textContent = '删除该主料';
+    btn.onclick = function() { row.remove(); };
+    btnRow.appendChild(btn);
+
+    row.appendChild(rowTop);
+    row.appendChild(btnRow);
+    list.appendChild(row);
+}
+
+function showDropdown(input) {
+    var dropdown = input.parentNode.querySelector('.ingredient-dropdown');
+    var val = input.value.toLowerCase();
+    var html = '';
+    var matches = 0;
+    for (var i = 0; i < MATERIALS.length; i++) {
+        if (MATERIALS[i].toLowerCase().indexOf(val) !== -1) {
+            matches++;
+            html += '<div data-name="' + escHtml(MATERIALS[i]) + '">' + escHtml(MATERIALS[i]) + '</div>';
+        }
+    }
+    if (matches === 0) {
+        html = '<div class="empty">未找到匹配物料</div>';
+    }
+    dropdown.innerHTML = html;
+    dropdown.classList.add('show');
+    var items = dropdown.querySelectorAll('div[data-name]');
+    for (var j = 0; j < items.length; j++) {
+        items[j].onclick = function() {
+            input.value = this.getAttribute('data-name');
+            dropdown.classList.remove('show');
+        };
+    }
+}
+
+function hideDropdown(input) {
+    var dropdown = input.parentNode.querySelector('.ingredient-dropdown');
+    dropdown.classList.remove('show');
+}
+
+function updateStatusStyle() {
+    var greenLabel = document.getElementById('opt-completed-label');
+    var redLabel = document.getElementById('opt-stopped-label');
+    greenLabel.classList.remove('checked-green');
+    redLabel.classList.remove('checked-red');
+    var checkboxes = document.querySelectorAll('input[name="dish-status"]');
+    for (var i = 0; i < checkboxes.length; i++) {
+        if (checkboxes[i].checked) {
+            if (checkboxes[i].value === 'completed') greenLabel.classList.add('checked-green');
+            if (checkboxes[i].value === 'stopped') redLabel.classList.add('checked-red');
+        }
+    }
+}
+
+function markAsStopped(idx) {
+    if (!confirm('确定将此菜品标记为"不再售卖"？')) return;
+    var d = DISHES[idx];
+    var record = {
+        dept: d.dept,
+        category: d.category,
+        dishName: d.name,
+        code: d.code,
+        unit: d.unit,
+        status: 'stopped',
+        ingredients: [],
+        seasoningCost: 0,
+        timestamp: new Date().toISOString()
+    };
+    // Remove existing
+    completedRecipes = completedRecipes.filter(function(r) { return r.dishName !== d.name; });
+    completedRecipes.push(record);
+    saveRecipes();
+    updateDeptCounts();
+    renderDishList();
+    alert('已标记为不再售卖');
+}
+
+function resumeToPending(idx) {
+    if (!confirm('确定将此菜品返回待录入列表？')) return;
+    var d = DISHES[idx];
+    completedRecipes = completedRecipes.filter(function(r) { return r.dishName !== d.name; });
+    saveRecipes();
+    updateDeptCounts();
+    renderDishList();
+    alert('已返回待录入列表');
+}
+
+function backToDishes() {
+    showPage('page-dishes');
+}
+
+function showPage(pageId) {
+    var pages = document.querySelectorAll('.page');
+    for (var i = 0; i < pages.length; i++) pages[i].classList.remove('active');
+    document.getElementById(pageId).classList.add('active');
+    window.scrollTo(0, 0);
+    if (pageId === 'page-dept') { loadFromCloud(); }
+}
+
+async function submitRecipe() {
+    var ingredients = [];
+    var rows = document.querySelectorAll('.ingredient-row');
+    for (var i = 0; i < rows.length; i++) {
+        var name = rows[i].querySelector('.ingredient-name').value;
+        var amount = rows[i].querySelector('.ingredient-amount').value;
+        var unit = rows[i].querySelector('.ingredient-unit').value;
+        if (name && amount) {
+            ingredients.push({ name: name, amount: parseFloat(amount), unit: unit || '' });
+        }
+    }
+    var statusCheckbox = document.querySelector('input[name="dish-status"]:checked');
+    var status = statusCheckbox ? statusCheckbox.value : 'pending';
+
+    if (status === 'completed' || status === 'stopped') {
+        ingredients = [];
+        document.getElementById('seasoning-cost').value = '';
+    } else {
+        if (ingredients.length === 0) {
+            alert('请至少添加一个主料，或选择"已填写配方"/"不再售卖"');
+            return;
+        }
+    }
+
+    var record = {
+        dept: currentDept,
+        category: currentDish.category,
+        dishName: currentDish.name,
+        code: currentDish.code,
+        unit: currentDish.unit,
+        status: status,
+        ingredients: status === 'completed' ? ingredients : [],
+        seasoningCost: status === 'completed' ? (parseFloat(document.getElementById('seasoning-cost').value) || 0) : 0,
+        created_at: new Date().toISOString()
+    };
+
+    completedRecipes = completedRecipes.filter(function(r) { return r.dishName !== currentDish.name; });
+    completedRecipes.push(record);
+    
+    var ok = await saveToCloud(record);
+    if (ok) {
+        localStorage.setItem('completedRecipes', JSON.stringify(completedRecipes));
+        alert('保存成功！');
+        updateDeptCounts();
+        renderDishList();
+        showPage('page-dishes');
+    }
+}
+
+function saveRecipes() {
+    try { localStorage.setItem('completedRecipes', JSON.stringify(completedRecipes)); } catch(e) {}
+}
+
+function showAdmin() {
+    updateAdminStats();
+    document.getElementById('admin-modal').classList.add('active');
+}
+
+function closeAdmin() {
+    document.getElementById('admin-modal').classList.remove('active');
+    loadFromCloud();
+}
+
+function returnToPending(dishName) {
+    if (!confirm('确定将「' + dishName + '」返回待录入列表？')) return;
+    completedRecipes = completedRecipes.filter(function(r) { return r.dishName !== dishName; });
+    saveRecipes();
+    updateDeptCounts();
+    updateAdminStats();
+    alert('已返回待录入');
+}
+
+function updateAdminStats() {
+    var total = DISHES.length;
+    var completed = 0, stopped = 0;
+    for (var i = 0; i < completedRecipes.length; i++) {
+        if (completedRecipes[i].status === 'completed') completed++;
+        else if (completedRecipes[i].status === 'stopped') stopped++;
+    }
+    var pending = total - completed - stopped;
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-completed').textContent = completed;
+    document.getElementById('stat-stopped').textContent = stopped;
+    document.getElementById('stat-pending').textContent = pending;
+
+    // Pending table
+    var ptHtml = '';
+    for (var j = 0; j < DISHES.length; j++) {
+        var d = DISHES[j];
+        if (!isCompleted(d.name)) {
+            ptHtml += '<tr><td>' + escHtml(d.dept) + '</td><td>' + escHtml(d.category) + '</td><td>' + escHtml(d.name) + '</td><td><span class="status-badge pending">待录入</span></td></tr>';
+        }
+    }
+    document.getElementById('pending-table').innerHTML = ptHtml;
+
+    // Completed table
+    var ctHtml = '';
+    for (var k = 0; k < completedRecipes.length; k++) {
+        var r = completedRecipes[k];
+        var mats = [];
+        for (var n = 0; n < r.ingredients.length; n++) {
+            mats.push(r.ingredients[n].name + ' ' + r.ingredients[n].amount + (r.ingredients[n].unit || ''));
+        }
+        var statusBadge = r.status === 'completed' ? '<span class="status-badge completed">✅ 已填写</span>' : '<span class="status-badge stopped">🚫 不售卖</span>';
+        ctHtml += '<tr><td>' + escHtml(r.dept) + '</td><td>' + escHtml(r.dishName) + '</td><td>' + statusBadge + '</td><td>' + escHtml(mats.join(', ')) + '</td><td>' + (r.seasoningCost ? '¥' + r.seasoningCost.toFixed(2) : '-') + '</td>';
+        ctHtml += '<td><button class="action-btn return" onclick="returnToPending(\'' + escAttr(r.dishName) + '\')">返回待录入</button></td></tr>';
+    }
+    document.getElementById('completed-table').innerHTML = ctHtml;
+
+    // Dept table
+    var dtHtml = '';
+    var depts = ['中厨', '点心', '味部'];
+    for (var m = 0; m < depts.length; m++) {
+        var dept = depts[m];
+        var deptTotal = 0, deptCompleted = 0, deptStopped = 0;
+        for (var p = 0; p < DISHES.length; p++) { if (DISHES[p].dept === dept) deptTotal++; }
+        for (var q = 0; q < completedRecipes.length; q++) {
+            if (completedRecipes[q].dept === dept) {
+                if (completedRecipes[q].status === 'completed') deptCompleted++;
+                else if (completedRecipes[q].status === 'stopped') deptStopped++;
+            }
+        }
+        var deptPending = deptTotal - deptCompleted - deptStopped;
+        dtHtml += '<tr><td>' + dept + '</td><td>' + deptTotal + '</td><td>' + deptCompleted + '</td><td>' + deptStopped + '</td><td>' + deptPending + '</td></tr>';
+    }
+    document.getElementById('dept-table').innerHTML = dtHtml;
+}
+
+function escAttr(s) {
+    return s.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function switchTab(btn, tabId) {
+    var btns = document.querySelectorAll('.tab-btn');
+    for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+    var contents = document.querySelectorAll('.tab-content');
+    for (var j = 0; j < contents.length; j++) contents[j].classList.remove('active');
+    btn.classList.add('active');
+    document.getElementById(tabId).classList.add('active');
+}
+
+function exportData() {
+    if (completedRecipes.length === 0) { alert('暂无已录入数据'); return; }
+    var text = '部门,类别,菜品名称,编号,单位,状态,主料,用量,主料单位,调料费\n';
+    for (var i = 0; i < completedRecipes.length; i++) {
+        var r = completedRecipes[i];
+        var statusText = r.status === 'completed' ? '已填写' : '不售卖';
+        if (r.ingredients.length === 0) {
+            text += r.dept + ',' + r.category + ',' + r.dishName + ',' + r.code + ',' + r.unit + ',' + statusText + ',,,,0\n';
+        } else {
+            for (var j = 0; j < r.ingredients.length; j++) {
+                text += r.dept + ',' + r.category + ',' + r.dishName + ',' + r.code + ',' + r.unit + ',' + statusText + ',' + r.ingredients[j].name + ',' + r.ingredients[j].amount + ',' + (r.ingredients[j].unit || '') + ',' + r.seasoningCost + '\n';
+            }
+        }
+    }
+    var blob = new Blob(['\uFEFF' + text], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '菜品配方录入数据.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+init();
+</script>
+</body>
+</html>
